@@ -9,19 +9,21 @@ use super::execution::{Execution, Status, Side};
 pub struct Strategy {
     tick_data: DataFrame,
     strategy_configs: Vec<StrategyConfig>,
-    pub executions: Vec<Execution>,
+    // pub executions: Vec<Execution>,
 }
 
 impl Strategy {
     pub fn new(tick_data: DataFrame, strategy_configs: Vec<StrategyConfig>) -> Strategy {
 
-        let mut executions: Vec<Execution> = vec![];
-
-        Strategy{tick_data: tick_data, strategy_configs: strategy_configs, executions: executions}
+        // let mut executions: Vec<Execution> = vec![];
+        // Strategy{tick_data: tick_data, strategy_configs: strategy_configs, executions: executions}
+        
+        Strategy{tick_data: tick_data, strategy_configs: strategy_configs}
     }
 
-    pub fn run(&mut self) {
+    pub fn run(&self) -> Vec<Execution> {
 
+        let mut executions: Vec<Execution> = vec![];
 
         for strategy_config in self.strategy_configs.iter() {
             let strategy_case = StrategyCase::new(&self.tick_data, strategy_config.clone());
@@ -29,22 +31,15 @@ impl Strategy {
             match strategy_case {
                 Ok(case) => {
                     match case.run() {
-                        Ok(e) => self.executions.push(e),
+                        Ok(e) => executions.push(e),
                         Err(err_exec) => println!("Error for executions"),
                     }
                 },
-                Err(err_strat) => println!("Error for strategy_config"),
+                // Err(err_strat) => println!("Error for strategy_config\r\n{:?}\r\n: {:#?}", err_strat, strategy_config),
+                Err(err_strat) => println!("Error for strategy_config\r\n{:?}", err_strat),
             };
         }
 
-
-        // def get_data(self):
-        // ls = [case.run().execution for case in self.cases]
-
-        // ls_df = [exec.results for exec in ls]
-        // exec_df = pd.concat(ls_df, ignore_index=True) if ls_df else pd.DataFrame()
-
-        // return exec_df
-
+        executions
     }
 }

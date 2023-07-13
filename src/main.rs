@@ -13,36 +13,45 @@ use models::execution::Side;
 
 fn main() {
 
-    // Setting common trade settings
+// Setting hard coded / programmatic settings
 
-    let max_holding_days: i64 = 7;
-    let period_twap_in: usize = 15;
-    let period_twap_out: usize = 15;
-    let trading_costs_bps: i32 = 10;
-    let take_profit_bps: usize = 250;
-    let stop_loss_bps: usize = 250;
+let max_holding_days: i64 = 7;
+let period_twap_in: usize = 15;
+let period_twap_out: usize = 15;
+let trading_costs_bps: i32 = 10;
+let take_profit_bps: usize = 250;
+let stop_loss_bps: usize = 250;
 
-    // Instantiating the trade settings
+let scs: Vec<StrategyConfig> = (0..1000).map(|_| StrategyConfig::new(Side::Buy, StrategyConfig::get_datetime("2023-01-12 12:30:00"), max_holding_days, period_twap_in, period_twap_out, trading_costs_bps, take_profit_bps, stop_loss_bps)).collect();
 
-    let sc1 = StrategyConfig::new(Side::Buy, StrategyConfig::get_datetime("2023-01-12 12:30:00"), max_holding_days, period_twap_in, period_twap_out, trading_costs_bps, take_profit_bps, stop_loss_bps);
-    let sc2 = StrategyConfig::new(Side::Buy, StrategyConfig::get_datetime("2023-02-15 12:30:00"), max_holding_days, period_twap_in, period_twap_out, trading_costs_bps, take_profit_bps, stop_loss_bps);
-    let sc3 = StrategyConfig::new(Side::Sell, StrategyConfig::get_datetime("2023-03-25 12:30:00"), max_holding_days, period_twap_in, period_twap_out, trading_costs_bps, take_profit_bps, stop_loss_bps);
-    let sc4 = StrategyConfig::new(Side::Buy, StrategyConfig::get_datetime("2023-06-20 12:30:00"), max_holding_days, period_twap_in, period_twap_out, trading_costs_bps, take_profit_bps, stop_loss_bps);
+let data = DataFactory::new(60*24*365);
+let tick_df = data.data;
 
-    let scs = vec![sc1, sc2, sc3, sc4];
+// Setting CSV based settings
 
-    // Generating dummy data mimicking tick data
+// let scs_df = DataFactory::from_csv("D:/projects/data/btc/trades_signals.csv").unwrap();
+// let tick_df = DataFactory::from_csv("D:/projects/data/btc/btcusd_1min.csv").unwrap();
+// let scs = StrategyConfig::from_csv(&scs_df);
 
-    let data = DataFactory::new(60*24*365);
-    let df = data.data;
+// Instantiate the backtesting Strategy wrapper
 
-    // Instantiate the backtesting Strategy wrapper
+use std::time::Instant;
+let now = Instant::now();
 
-    let mut strategy = Strategy::new(df, scs);
-    strategy.run();
+let strategy = Strategy::new(tick_df, scs);
+let executions = strategy.run();
 
-    // Printing resulting trades
-    
-    println!("{:#?}", strategy.executions);
+let elapsed = now.elapsed();
+println!("\r\n##################################################################\r\n
+Elapsed: {:.2?} - For {} Executions
+\r\n##################################################################\r\n", elapsed, executions.len());
+
+println!("Executions: {:#?}", executions);
+
+
+
+// Printing resulting trades
+
+// println!("{:#?}", strategy.executions);
 
 }

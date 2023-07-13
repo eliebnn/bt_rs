@@ -15,67 +15,117 @@ pub struct StrategyCase {
 }
 
 impl StrategyCase {
-    
+
+
     pub fn new(data: &DataFrame, sc: StrategyConfig) -> Result<StrategyCase, Box<dyn Error>> {
-
-        let bar_data: DataFrame = match sc.datetime {
+        let bar_data = match sc.datetime {
             Some(st_tsp) => {
-                
-                let ed_dt = DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(st_tsp, 0), Utc);
-                let ed_tsp = (ed_dt + Duration::days(sc.max_holding_days + 1)).timestamp();              
-                
-                let tmp_data = data.clone();
-                let tsp_series = tmp_data.column("timestamp")?.i64()?;
-
-                let mask_gt = tsp_series.gt(st_tsp);
-                let mask_lt = tsp_series.lt(ed_tsp);
-                
-                let mask_range = mask_gt & mask_lt;
-                
-                tmp_data.filter(&mask_range)?.sort(["timestamp"], false)?
+                let ed_tsp = (DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(st_tsp, 0), Utc) + Duration::days(sc.max_holding_days + 1)).timestamp();
+                let tsp_series = data.column("timestamp")?.i64()?;
+    
+                let mask_range = tsp_series.gt(st_tsp) & tsp_series.lt(ed_tsp);
+                data.filter(&mask_range)?.sort(["timestamp"], false)?
             },
-
-                // data.filter(&data.column("timestamp")?.gt(st_tsp)?)?},
-            None => {data.clone().sort(["timestamp"], false)?}
+            None => { data.clone().sort(["timestamp"], false)? }
         };
-
-        let mut df = bar_data.clone();
-        let (rows, cols) = df.shape();
+    
         let fees = sc.fees();
-
-        let price_in_gross = df.head(Some(sc.period_twap_in)).column("close").expect("foo").mean().ok_or("Error on Net Price calculation.")?;
+        let price_in_gross = bar_data.head(Some(sc.period_twap_in)).column("close").expect("foo").mean().ok_or("Error on Net Price calculation.")?;
         let net_price: f64 = price_in_gross * (1.0 + fees);
-
-        // ----
-
-        let mut net_mm_price_ser = df.column("close")?.clone().f64()?.apply(|price| price * (1.0 - fees));
+    
+        let mut df = bar_data.clone();
+    
+        let mut net_mm_price_ser = df.column("close")?.f64()?.apply(|price| price * (1.0 - fees));
         net_mm_price_ser.rename("price_out_mm_net");
-
+    
         let mut perf_ser = match sc.side {
-            Buy => df.column("close")?.clone().f64()?.apply(|price| (price / net_price - 1.0) * 10000.0),
-            Sell => df.column("close")?.clone().f64()?.apply(|price| (1.0 - (price / net_price)) * 10000.0)
+            Buy => df.column("close")?.f64()?.apply(|price| (price / net_price - 1.0) * 10000.0),
+            Sell => df.column("close")?.f64()?.apply(|price| (1.0 - (price / net_price)) * 10000.0)
         };
         perf_ser.rename("perf_bps");
-
-
-        let sl: Vec<bool> = perf_ser.into_iter().map(|perf| perf.unwrap() <= -(sc.stop_loss_bps as i32) as f64).collect();
-        let tp: Vec<bool> = perf_ser.into_iter().map(|perf| perf.unwrap() >= sc.take_profit_bps  as f64).collect();
-
-        let prices_in = Series::new("price_in", (0..rows).map(|_| net_price).collect::<Vec<f64>>());
+    
+        let (sl, tp): (Vec<bool>, Vec<bool>) = perf_ser.into_iter().map(|perf| {
+            let perf = perf.unwrap();
+            (perf <= -(sc.stop_loss_bps as i32) as f64, perf >= sc.take_profit_bps  as f64)
+        }).unzip();
+    
+        let prices_in = Series::new("price_in", vec![net_price; df.shape().0]);
         let sl = Series::new("stop_loss_hit", sl);
         let tp = Series::new("take_profit_hit", tp);
     
-        let mut df = df.with_column(perf_ser)?.with_column(net_mm_price_ser)?.clone();
-        let result = df.with_column(prices_in)?.with_column(sl)?.with_column(tp)?.clone();
-
-        println!("\r\nQuant Data: {:?}\r\n", result);
-
+        let result = df.with_column(perf_ser)?
+            .with_column(net_mm_price_ser)?
+            .with_column(prices_in)?
+            .with_column(sl)?
+            .with_column(tp)?;
+    
         Ok(StrategyCase {
             bar_data: bar_data,
-            quant_data: result,
+            quant_data: result.clone(),
             strategy_config: sc,
         })
     }
+    
+    // pub fn new(data: &DataFrame, sc: StrategyConfig) -> Result<StrategyCase, Box<dyn Error>> {
+
+    //     let bar_data: DataFrame = match sc.datetime {
+    //         Some(st_tsp) => {
+                
+    //             let ed_dt = DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(st_tsp, 0), Utc);
+    //             let ed_tsp = (ed_dt + Duration::days(sc.max_holding_days + 1)).timestamp();              
+                
+    //             let tmp_data = data.clone();
+    //             let tsp_series = tmp_data.column("timestamp")?.i64()?;
+
+    //             let mask_gt = tsp_series.gt(st_tsp);
+    //             let mask_lt = tsp_series.lt(ed_tsp);
+                
+    //             let mask_range = mask_gt & mask_lt;
+                
+    //             tmp_data.filter(&mask_range)?.sort(["timestamp"], false)?
+    //         },
+
+    //             // data.filter(&data.column("timestamp")?.gt(st_tsp)?)?},
+    //         None => {data.clone().sort(["timestamp"], false)?}
+    //     };
+
+    //     let mut df = bar_data.clone();
+    //     let (rows, cols) = df.shape();
+    //     let fees = sc.fees();
+
+    //     let price_in_gross = df.head(Some(sc.period_twap_in)).column("close").expect("foo").mean().ok_or("Error on Net Price calculation.")?;
+    //     let net_price: f64 = price_in_gross * (1.0 + fees);
+
+    //     // ----
+
+    //     let mut net_mm_price_ser = df.column("close")?.clone().f64()?.apply(|price| price * (1.0 - fees));
+    //     net_mm_price_ser.rename("price_out_mm_net");
+
+    //     let mut perf_ser = match sc.side {
+    //         Buy => df.column("close")?.clone().f64()?.apply(|price| (price / net_price - 1.0) * 10000.0),
+    //         Sell => df.column("close")?.clone().f64()?.apply(|price| (1.0 - (price / net_price)) * 10000.0)
+    //     };
+    //     perf_ser.rename("perf_bps");
+
+
+    //     let sl: Vec<bool> = perf_ser.into_iter().map(|perf| perf.unwrap() <= -(sc.stop_loss_bps as i32) as f64).collect();
+    //     let tp: Vec<bool> = perf_ser.into_iter().map(|perf| perf.unwrap() >= sc.take_profit_bps  as f64).collect();
+
+    //     let prices_in = Series::new("price_in", (0..rows).map(|_| net_price).collect::<Vec<f64>>());
+    //     let sl = Series::new("stop_loss_hit", sl);
+    //     let tp = Series::new("take_profit_hit", tp);
+    
+    //     let mut df = df.with_column(perf_ser)?.with_column(net_mm_price_ser)?.clone();
+    //     let result = df.with_column(prices_in)?.with_column(sl)?.with_column(tp)?.clone();
+
+    //     // println!("\r\nQuant Data: {:?}\r\n", result);
+
+    //     Ok(StrategyCase {
+    //         bar_data: bar_data,
+    //         quant_data: result,
+    //         strategy_config: sc,
+    //     })
+    // }
 
     fn to_f64(v: AnyValue) -> f64 {
         match v {
@@ -101,10 +151,16 @@ impl StrategyCase {
 
         // --
 
-        let tp_mask = df.column("take_profit_hit")?.bool()?.clone();
-        let tp_df = df.filter(&tp_mask)?;
+        // let tp_mask = df.column("take_profit_hit")?.bool()?.clone();
+        // let tp_df = df.filter(&tp_mask)?;
 
-        let sl_mask = df.column("stop_loss_hit")?.bool()?.clone();
+        // let sl_mask = df.column("stop_loss_hit")?.bool()?.clone();
+        // let sl_df = df.filter(&sl_mask)?;
+
+        let tp_mask = df.column("take_profit_hit")?.bool()?;
+        let tp_df = df.filter(&tp_mask)?;
+    
+        let sl_mask = df.column("stop_loss_hit")?.bool()?;
         let sl_df = df.filter(&sl_mask)?;
 
         // --
@@ -112,8 +168,6 @@ impl StrategyCase {
         let mh_dt: i64 = StrategyCase::to_i64(df.tail(Some(twap_out)).head(Some(1)).column("timestamp")?.get(0)?);
         let tp_dt: i64 = if tp_df.shape().0 != 0 {StrategyCase::to_i64(tp_df.column("timestamp")?.get(0)?)} else {mh_dt};
         let sl_dt: i64 = if sl_df.shape().0 != 0 {StrategyCase::to_i64(sl_df.column("timestamp")?.get(0)?)} else {mh_dt};
-
-        println!("{:?}, {:?}, {:?}", mh_dt, tp_dt, sl_dt);
 
         let binding = [mh_dt, tp_dt, sl_dt];
         let unwind_dt = binding.iter().min().ok_or("Error while computing unwind timestamp.")?;

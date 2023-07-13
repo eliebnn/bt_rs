@@ -1,17 +1,21 @@
 use chrono::Duration;
 use chrono::naive::NaiveDateTime;
 
+use rand::{Rng,SeedableRng};
+use rand_chacha::ChaCha8Rng;
+
 use polars::prelude::*;
 
-use rand::{Rng,SeedableRng};
-// use rand::prelude::*;
-use rand_chacha::ChaCha8Rng;
+use std::error::Error;
+use std::fs::File;
+use std::io::BufReader;
 
 pub struct DataFactory {
     pub data: DataFrame
 }
 
 impl DataFactory {
+
     pub fn new(size: i32) -> DataFactory {
 
         let batch_size = size;
@@ -21,19 +25,6 @@ impl DataFactory {
         let local_now = NaiveDateTime::parse_from_str(datetime_str, "%Y-%m-%d %H:%M:%S").expect("Failed to parse datetime");
     
         // --------
-    
-        // let prices: Vec<f64> = (0..batch_size).map(|_| rng.gen_range(-15..16) as f64).collect();
-
-        // let mut v: Vec<f64> = vec![100.0];
-
-        // for i in prices.iter(){
-        //     let perf = v.last().unwrap() * (1.0 + (i / 10000.0));
-        //     println!("{}, {}", i, perf);
-        //     v.push(perf);
-        // }
-
-        // v.pop();
-        // let prices = v;
 
         let prices: Vec<f64> = (0..batch_size).map(|_| rng.gen_range(-15..16) as f64).collect::<Vec<f64>>().iter()
             .scan(100.0, |state, &price| {
@@ -51,6 +42,22 @@ impl DataFactory {
         DataFactory {
             data: data
         }
+    }
+
+    pub fn from_csv(path: &str) -> Result<DataFrame, Box<dyn Error>> {
+
+        let file_path = path;
+
+        let file = File::open(file_path).expect("Could not open file");
+        let reader = BufReader::new(file);
+    
+        let df = CsvReader::new(reader)
+            .infer_schema(Some(100))  // Use up to 100 records to infer the schema
+            .has_header(true)  // Tell the reader that your CSV has a header
+            .finish()
+            .expect("Could not read CSV");
+
+        Ok(df)
     }
 }
 
