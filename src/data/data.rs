@@ -6,9 +6,11 @@ use rand_chacha::ChaCha8Rng;
 
 use polars::prelude::*;
 
+use std::path::Path;
 use std::error::Error;
 use std::fs::File;
 use std::io::BufReader;
+use std::io::{self, BufRead};
 
 pub struct DataFactory {
     pub data: DataFrame
@@ -59,45 +61,33 @@ impl DataFactory {
 
         Ok(df)
     }
+
+    pub fn write_csv(path: &str, df: &mut DataFrame) {
+
+        let file = File::create(path).expect("Could not create file");
+        CsvWriter::new(file).has_header(true).finish(df).expect("Could not write DataFrame to CSV");
+    }
+
+    pub fn read_file(path: &str) -> Vec<String> {
+
+        let mut lines: Vec<String> = vec![];
+
+        let path = Path::new(path);
+        let display = path.display();
+    
+        let file = match File::open(&path) {
+            Err(error) => panic!("couldn't open {}: {}", display, error.to_string()),
+            Ok(file) => file,
+        };
+        
+        let reader = BufReader::new(file);
+    
+        for (index, line) in reader.lines().enumerate() {
+            lines.push(line.unwrap());
+        }
+
+        lines
+
+    }
 }
 
-// fn main() {
-
-//     let batch_size = 50;
-//     let mut rng = ChaCha8Rng::seed_from_u64(1);
-    
-//     let datetime_str = "2023-06-30 12:30:00";
-//     let local_now = NaiveDateTime::parse_from_str(datetime_str, "%Y-%m-%d %H:%M:%S").expect("Failed to parse datetime");
-
-//     // --------
-
-//     let prices: Vec<i32> = (0..batch_size).map(|_| rng.gen_range(5..10)).collect();
-//     let dates: Vec<_> = (0..batch_size).map(|i| (local_now - Duration::minutes(i)).timestamp()).collect();
-
-//     println!("{:?}", dates);
-//     println!("{:?}", prices);
-
-//     let dates_ser = Series::new("dates", &dates);
-//     let prices_ser = Series::new("prices", &prices);
-
-//     let df: DataFrame = DataFrame::new(vec![dates_ser, prices_ser]).expect("Failed to create DataFrame");
-//     let filter_dt = NaiveDateTime::parse_from_str("2023-06-30 12:00:00", "%Y-%m-%d %H:%M:%S").expect("Failed to parse datetime").timestamp();
-
-//     let filtered_range_df = df.filter(&df.column("dates").expect("foo").gt(filter_dt).unwrap()).unwrap();
-
-//     // let filtered_range_df = df.filter(col("dates").gt_eq(start.timestamp_millis()),)
-
-
-//     // let conf = RollingOptionsImpl{window_size: Duration::new(2), min_periods: 2, ..RollingOptionsImpl::default()};
-
-//     // let mut foo = df.column("ages").expect("Error foo").rolling_mean(conf.clone()).expect("Error bar");
-//     // foo.rename("rolling_avg");
-
-//     // let mut bar = df.column("ages").expect("Error foo").cumsum(false);
-//     // bar.rename("cumsum");
-
-
-//     println!("{:?}", df);
-//     println!("{:?}", filtered_range_df);
-
-// }

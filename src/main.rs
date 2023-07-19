@@ -8,7 +8,10 @@ use data::data::DataFactory;
 use models::strategy_config::StrategyConfig;
 use models::strategy_case::StrategyCase;
 use models::strategy::Strategy;
-use models::execution::Side;
+use models::execution::{Side, Status};
+
+use std::time::Instant;
+use std::env;
 
 
 fn main() {
@@ -38,7 +41,7 @@ fn main() {
     use std::time::Instant;
     let now = Instant::now();
 
-    let strategy = Strategy::new(bar_df, scs);
+    let strategy = Strategy::new(&bar_df, scs);
     let executions = strategy.run();
 
     let elapsed = now.elapsed();
